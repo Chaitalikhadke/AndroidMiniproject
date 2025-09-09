@@ -9,24 +9,18 @@
     tools:context=".MainActivity">
 
 
-    <Button
-        android:id="@+id/click"
-        android:paddingLeft="20dp"
-        android:text="click picture"
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
 
     <Button
-        android:paddingBottom="16dp"
-        android:id="@+id/front"
-        android:text="Front camera"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
-    <Button
-        android:paddingBottom="16dp"
-        android:id="@+id/rear"
-        android:text="Rear camera"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:id="@+id/captureButton"
+        android:layout_width="wrap_content"
+        android:padding="16dp"
+        android:layout_height="wrap_content"
+        android:text="Capture Image"
+        android:layout_marginTop="16dp"/>
 
 </LinearLayout>
