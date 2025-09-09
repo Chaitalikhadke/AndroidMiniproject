@@ -2,9 +2,12 @@ package com.sunbeaminfo.cameraapp;
 
 import android.Manifest;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.widget.Button;
 import android.widget.Toast;
@@ -23,12 +26,15 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.io.File;
+import java.util.Map;
+
 public class MainActivity extends AppCompatActivity {
     private PreviewView previewView;
     private ImageCapture imageCapture;
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
-    private final String[] REQUIRED_PERMISSIONS = new String[] { Manifest.permission.CAMERA };
+    private final String[] REQUIRED_PERMISSIONS = new String[]{Manifest.permission.CAMERA};
     private static final int REQUEST_CODE_PERMISSIONS = 10;
 
     @Override
@@ -40,7 +46,6 @@ public class MainActivity extends AppCompatActivity {
         Button captureButton = findViewById(R.id.captureButton);
         Button switchButton = findViewById(R.id.switchButton);
 
-
         if (allPermissionsGranted()) {
             startCamera();
         } else {
@@ -49,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
 
         captureButton.setOnClickListener(v -> takePhoto());
         switchButton.setOnClickListener(v -> {
-
             cameraSelector = (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA)
                     ? CameraSelector.DEFAULT_FRONT_CAMERA
                     : CameraSelector.DEFAULT_BACK_CAMERA;
@@ -57,14 +61,16 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-
     private final ActivityResultContracts.RequestMultiplePermissions requestPermissionsContract =
             new ActivityResultContracts.RequestMultiplePermissions();
 
-    private final ActivityResultCallback<java.util.Map<String, Boolean>> permissionCallback = isGrantedMap -> {
+    private final ActivityResultCallback<Map<String, Boolean>> permissionCallback = isGrantedMap -> {
         boolean allGranted = true;
         for (Boolean granted : isGrantedMap.values()) {
-            if (!granted) { allGranted = false; break; }
+            if (!granted) {
+                allGranted = false;
+                break;
+            }
         }
         if (allGranted) {
             startCamera();
@@ -114,43 +120,40 @@ public class MainActivity extends AppCompatActivity {
     private void takePhoto() {
         if (imageCapture == null) return;
 
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.Images.Media.DISPLAY_NAME, "IMG_" + System.currentTimeMillis() + ".jpg");
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, "IMG_" + System.currentTimeMillis() + ".jpg");
+        contentValues.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CameraApp");
 
-        //  — Correctly specifying the storage folder here
-        values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraApp");
+        Uri imageUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues);
 
-        // Optional on Android Q+ to prevent incomplete visibility
-        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+        if (imageUri != null) {
+            ImageCapture.OutputFileOptions outputFileOptions = new ImageCapture.OutputFileOptions.Builder(getContentResolver(), imageUri, contentValues).build();
 
-        Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-        if (uri == null) {
-            Toast.makeText(this, "Failed to create MediaStore entry", Toast.LENGTH_SHORT).show();
-            return;
+            imageCapture.takePicture(
+                    outputFileOptions,
+                    ContextCompat.getMainExecutor(this),
+                    new ImageCapture.OnImageSavedCallback() {
+                        @Override
+                        public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
+                            ContentValues updateValues = new ContentValues();
+                            updateValues.put(MediaStore.Images.Media.IS_PENDING, 0);
+                            getContentResolver().update(imageUri, updateValues, null, null);
+
+                            String[] paths = {imageUri.getPath()};
+                            MediaScannerConnection.scanFile(MainActivity.this, paths, null, null);
+
+                            Toast.makeText(MainActivity.this, "Photo saved to gallery", Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        public void onError(@NonNull ImageCaptureException exception) {
+                            exception.printStackTrace();
+                            Toast.makeText(MainActivity.this, "Error saving photo: " + exception.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    });
         }
-
-        ImageCapture.OutputFileOptions outputOptions =
-                new ImageCapture.OutputFileOptions.Builder(getContentResolver(), uri, values).build();
-
-        imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(this),
-                new ImageCapture.OnImageSavedCallback() {
-                    @Override
-                    public void onImageSaved(@NonNull ImageCapture.OutputFileResults output) {
-                        // Once saved, clear the pending flag
-                        ContentValues update = new ContentValues();
-                        update.put(MediaStore.Images.Media.IS_PENDING, 0);
-                        getContentResolver().update(uri, update, null, null);
-                        Toast.makeText(MainActivity.this, "Photo saved to gallery", Toast.LENGTH_SHORT).show();
-                    }
-
-                    @Override
-                    public void onError(@NonNull ImageCaptureException exception) {
-                        exception.printStackTrace();
-                        Toast.makeText(MainActivity.this, "Error saving photo: " + exception.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                });
     }
 
-
 }
+
